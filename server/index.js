@@ -2,6 +2,7 @@
  * TerraLend Backend Server
  * 
  * Express.js API server for the TerraLend green loan platform.
+ * Now with MongoDB persistence and JWT authentication.
  * 
  * ============================================
  * ⚠️ IMPORTANT: DEMO/SIMULATION NOTICE
@@ -23,8 +24,23 @@
 
 import express from 'express';
 import cors from 'cors';
+import dotenv from 'dotenv';
+
+// Load environment variables
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Load environment variables from .env file in the same directory
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '.env') });
+
+// Database connection
+import connectDB from './config/db.js';
 
 // Import route handlers
+import authRouter from './routes/auth.js';
+import profileRouter from './routes/profile.js';
 import loansRouter from './routes/loans.js';
 import verificationRouter from './routes/verification.js';
 import impactRouter from './routes/impact.js';
@@ -36,23 +52,38 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ============================================
+// Database Connection
+// ============================================
+
+connectDB();
+
+// ============================================
 // Middleware Configuration
 // ============================================
 
 // Enable CORS for frontend communication
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Parse JSON request bodies
 app.use(express.json());
 
-// Request logging middleware
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    if (req.method === 'POST') console.log('Body:', JSON.stringify(req.body).substring(0, 100) + '...');
     next();
+});
+
+// Crash handling
+process.on('uncaughtException', (err) => {
+    console.error('UNCAUGHT EXCEPTION! Shutting down...', err);
+});
+process.on('unhandledRejection', (err) => {
+    console.error('UNHANDLED REJECTION! Shutting down...', err);
 });
 
 // ============================================
@@ -64,10 +95,17 @@ app.get('/api/health', (req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        version: '1.0.0',
-        environment: 'demo'
+        version: '2.0.0',
+        environment: process.env.NODE_ENV || 'development',
+        database: 'MongoDB'
     });
 });
+
+// Authentication routes
+app.use('/api/auth', authRouter);
+
+// Profile management routes
+app.use('/api/profile', profileRouter);
 
 // Loan management endpoints
 app.use('/api/loans', loansRouter);
@@ -118,13 +156,19 @@ app.listen(PORT, () => {
   ║  🌱 TerraLend API Server                   ║
   ╠════════════════════════════════════════════╣
   ║  Port: ${PORT}                               ║
-  ║  Mode: Demo/Simulation                     ║
+  ║  Mode: ${process.env.NODE_ENV || 'development'}                       ║
+  ║  Database: MongoDB                         ║
   ║  Status: Running                           ║
   ╚════════════════════════════════════════════╝
   
   Available endpoints:
-  - GET  /api/health
+  - POST /api/auth/register
+  - POST /api/auth/login
+  - GET  /api/auth/me
+  - POST /api/profile
+  - GET  /api/profile
   - POST /api/loans
+  - GET  /api/loans
   - GET  /api/loans/:id
   - POST /api/verify/green-score
   - GET  /api/impact/:loanId

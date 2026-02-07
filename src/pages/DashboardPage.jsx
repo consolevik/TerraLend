@@ -14,8 +14,9 @@ import {
     Wallet,
     Activity
 } from 'lucide-react';
-import { getUserLoans, getPortfolioImpact } from '../services/api';
-import GreenScoreCard from '../components/GreenScoreCard';
+import { getLoans, getPortfolioImpact } from '../services/api';
+import GreenScoreCard from '../components/GreenScoreCard'; // Keep for other uses if needed
+import CreditScoreCard from '../components/CreditScoreCard';
 import ClimateRiskAlert from '../components/ClimateRiskAlert';
 import './DashboardPage.css';
 
@@ -32,9 +33,6 @@ function DashboardPage() {
     const [error, setError] = useState(null);
     const [dashboardData, setDashboardData] = useState(null);
 
-    // Demo user ID
-    const userId = 'demo-user-001';
-
     useEffect(() => {
         fetchDashboardData();
     }, [role]);
@@ -44,15 +42,93 @@ function DashboardPage() {
         setError(null);
 
         try {
-            const [loansResponse, impactResponse] = await Promise.all([
-                getUserLoans(userId, role),
-                getPortfolioImpact(userId)
-            ]);
+            const loansResponse = await getLoans();
+
+            let impactResponse = {};
+            try {
+                // impactResponse = await getPortfolioImpact('me'); 
+            } catch (e) {
+                console.warn('Impact fetch failed', e);
+            }
+
+            // Transform API data to match component expectations
+            const transformedLoans = (loansResponse.loans || []).map(loan => ({
+                ...loan,
+                id: loan.loanId || loan._id,
+                amount: loan.loanAmount || loan.amount || 0,
+                projectType: loan.greenObjective || loan.projectType || 'Green Loan',
+                status: loan.status,
+                disbursedDate: loan.disbursedDate ? new Date(loan.disbursedDate).toLocaleDateString() : 'Pending',
+                nextPayment: loan.nextPayment ? new Date(loan.nextPayment).toLocaleDateString() : null,
+                nextPaymentAmount: loan.nextPaymentAmount,
+                progress: loan.repaymentProgress || loan.progress || 0
+            }));
+
+            // Calculate Credit Score based on loan history
+            let baseScore = 600;
+            let scoreAdditions = 0;
+            const breakdown = [];
+
+            // 1. History Length (+10 per loan)
+            const loanCount = transformedLoans.length;
+            if (loanCount > 0) {
+                const points = loanCount * 10;
+                baseScore += points;
+                scoreAdditions += points;
+                breakdown.push({ label: 'Credit History', value: `+${points} pts` });
+            }
+
+            // 2. Repayment Progress
+            let progressPoints = 0;
+            let completedLoans = 0;
+            transformedLoans.forEach(loan => {
+                if (loan.status === 'completed') {
+                    completedLoans++;
+                }
+                // Add points for progress (max 20 per loan)
+                if (loan.progress > 0) {
+                    progressPoints += Math.round((loan.progress / 100) * 20);
+                }
+            });
+
+            if (completedLoans > 0) {
+                const completedPoints = completedLoans * 50;
+                baseScore += completedPoints;
+                scoreAdditions += completedPoints;
+                breakdown.push({ label: 'Completed Loans', value: `+${completedPoints} pts` });
+            }
+
+            if (progressPoints > 0) {
+                baseScore += progressPoints;
+                scoreAdditions += progressPoints;
+                breakdown.push({ label: 'Repayment Progress', value: `+${progressPoints} pts` });
+            }
+
+            // Cap at 900
+            const finalCreditScore = Math.min(900, baseScore);
+
+            // Generate climate alerts based on location (mock logic or from loan)
+            // In a real app, this would come from the /api/climate/risk endpoint we built
+            const climateAlerts = [];
+            const latestLoan = transformedLoans.length > 0 ? transformedLoans[0] : null;
+            if (latestLoan?.projectLocation) {
+                // Simple mock to show alerts based on the location we just added
+                const loc = latestLoan.projectLocation.toLowerCase();
+                if (loc.includes('rajasthan') || loc.includes('gujarat')) {
+                    climateAlerts.push({ type: 'drought', level: 'medium', message: 'Water scarcity risk in region' });
+                }
+                if (loc.includes('mumbai') || loc.includes('kerala')) {
+                    climateAlerts.push({ type: 'flood', level: 'high', message: 'Heavy rainfall/flood risk' });
+                }
+            }
 
             setDashboardData({
-                loans: loansResponse.loans,
+                loans: transformedLoans,
                 summary: loansResponse.summary,
                 impact: impactResponse,
+                creditScore: finalCreditScore,
+                creditBreakdown: breakdown,
+                climateAlerts: climateAlerts
             });
         } catch (err) {
             setError(err.message || 'Failed to load dashboard data');
@@ -60,6 +136,7 @@ function DashboardPage() {
             setLoading(false);
         }
     };
+
 
     const getStatusBadge = (status) => {
         const statuses = {
@@ -82,54 +159,25 @@ function DashboardPage() {
         return labels[role] || labels.borrower;
     };
 
-    // Sample data for demonstration
-    const demoData = {
-        greenScore: 82,
-        sustainabilityClass: 'high',
-        reasoning: {
-            cash_flow: 'stable',
-            project_type: 'solar',
-            climate_risk: 'low',
-            emission_reduction: 'significant'
-        },
-        climateAlerts: [
-            {
-                type: 'drought',
-                level: 'medium',
-                description: 'Moderate drought conditions expected in project region during summer months.',
-                recommendation: 'Consider water backup systems for maintenance operations.'
-            }
-        ],
-        loans: [
-            {
-                id: 'TL-2025-001',
-                amount: 1500000,
-                projectType: 'Solar Installation',
-                status: 'active',
-                disbursedDate: '2025-01-15',
-                nextPayment: '2025-03-01',
-                nextPaymentAmount: 45000,
-                progress: 35,
-            },
-            {
-                id: 'TL-2024-042',
-                amount: 500000,
-                projectType: 'EV Charging Station',
-                status: 'completed',
-                disbursedDate: '2024-06-20',
-                completedDate: '2025-01-20',
-                progress: 100,
-            }
-        ],
+    // Use real data, default to empty structure if loading or null
+    // We intentionally removed the hardcoded demoData fallback to show only user's actual loans
+    const displayData = dashboardData || {
+        creditScore: 600,
+        creditBreakdown: [],
+        greenScore: 0,
+        sustainabilityClass: 'Not Rated',
+        reasoning: {},
+        climateAlerts: [],
+        loans: [],
         summary: {
-            totalDisbursed: 2000000,
-            activeLoans: 1,
-            totalRepaid: 540000,
-            upcomingPayment: 45000,
+            totalDisbursed: 0,
+            activeLoans: 0,
+            totalRepaid: 0,
+            upcomingPayment: 0
         }
     };
 
-    const displayData = dashboardData || demoData;
+    const [selectedLoan, setSelectedLoan] = useState(null);
 
     return (
         <div className="dashboard-page">
@@ -259,9 +307,7 @@ function DashboardPage() {
                         <div className="loans-section">
                             <div className="section-header">
                                 <h2>Your Loans</h2>
-                                <Link to="/apply" className="btn btn-ghost btn-sm">
-                                    View All
-                                </Link>
+                                {/* Removed 'View All' link as it was misleading */}
                             </div>
 
                             {loading ? (
@@ -279,6 +325,9 @@ function DashboardPage() {
                                                     <div className="loan-info">
                                                         <span className="loan-id">{loan.id}</span>
                                                         <h3>{loan.projectType}</h3>
+                                                        <span className="mini-green-score" title="Green Score">
+                                                            🌱 {loan.aiScore || 0}/100
+                                                        </span>
                                                     </div>
                                                     <span className={`status-badge ${statusInfo.className}`}>
                                                         {statusInfo.label}
@@ -325,7 +374,10 @@ function DashboardPage() {
                                                         <Activity size={16} />
                                                         View Impact
                                                     </Link>
-                                                    <button className="btn btn-secondary btn-sm">
+                                                    <button
+                                                        className="btn btn-secondary btn-sm"
+                                                        onClick={() => setSelectedLoan(loan)}
+                                                    >
                                                         <FileText size={16} />
                                                         Statement
                                                     </button>
@@ -350,11 +402,10 @@ function DashboardPage() {
 
                     {/* Right Column - Sidebar */}
                     <div className="dashboard-sidebar">
-                        {/* Green Score */}
-                        <GreenScoreCard
-                            score={displayData.greenScore}
-                            classification={displayData.sustainabilityClass}
-                            reasoning={displayData.reasoning}
+                        {/* Credit Score */}
+                        <CreditScoreCard
+                            score={displayData.creditScore}
+                            breakdown={displayData.creditBreakdown}
                             loading={loading}
                         />
 
@@ -388,6 +439,68 @@ function DashboardPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Statement Modal */}
+            {selectedLoan && (
+                <div className="modal-overlay" onClick={() => setSelectedLoan(null)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2>Loan Statement</h2>
+                            <button className="btn-close" onClick={() => setSelectedLoan(null)}>×</button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="statement-header">
+                                <div>
+                                    <h3>{selectedLoan.projectType}</h3>
+                                    <span className="text-sm text-gray">{selectedLoan.id}</span>
+                                </div>
+                                <span className={`status-badge ${getStatusBadge(selectedLoan.status).className}`}>
+                                    {getStatusBadge(selectedLoan.status).label}
+                                </span>
+                            </div>
+
+                            <hr className="divider" />
+
+                            <div className="statement-grid">
+                                <div className="statement-item">
+                                    <label>Principal Amount</label>
+                                    <span>₹{selectedLoan.amount.toLocaleString()}</span>
+                                </div>
+                                <div className="statement-item">
+                                    <label>Disbursed Date</label>
+                                    <span>{selectedLoan.disbursedDate}</span>
+                                </div>
+                                <div className="statement-item">
+                                    <label>Tenure</label>
+                                    <span>{selectedLoan.tenure} months</span>
+                                </div>
+                                <div className="statement-item">
+                                    <label>Interest Rate</label>
+                                    <span>8.5% p.a. (Subsidized)</span>
+                                </div>
+                            </div>
+
+                            <div className="statement-summary">
+                                <div className="summary-row">
+                                    <span>Total Paid</span>
+                                    <span>₹{((selectedLoan.amount * selectedLoan.progress) / 100).toLocaleString()}</span>
+                                </div>
+                                <div className="summary-row">
+                                    <span>Outstanding Balance</span>
+                                    <span>₹{(selectedLoan.amount - ((selectedLoan.amount * selectedLoan.progress) / 100)).toLocaleString()}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setSelectedLoan(null)}>Close</button>
+                            <button className="btn btn-primary">
+                                <Download size={16} />
+                                Download PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

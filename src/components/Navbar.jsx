@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Leaf, ChevronDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Menu, X, Leaf, LogOut, User } from 'lucide-react';
+import { isAuthenticated, logout, getCurrentUser } from '../services/api';
 import './Navbar.css';
 
 /**
@@ -9,7 +10,20 @@ import './Navbar.css';
  */
 function Navbar() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
     const location = useLocation();
+    const navigate = useNavigate();
+
+    // Check auth state on mount and location change
+    useEffect(() => {
+        setIsLoggedIn(isAuthenticated());
+    }, [location]);
+
+    const handleLogout = () => {
+        logout();
+        setIsLoggedIn(false);
+        navigate('/login');
+    };
 
     const navLinks = [
         { path: '/', label: 'Home' },
@@ -45,11 +59,21 @@ function Navbar() {
                     ))}
                 </div>
 
-                {/* CTA Button */}
+                {/* CTA / Auth Buttons */}
                 <div className="navbar-actions hide-mobile">
-                    <Link to="/apply" className="btn btn-primary">
-                        Get Green Loan
-                    </Link>
+                    {isLoggedIn ? (
+                        <button className="btn btn-ghost" onClick={handleLogout}>
+                            <LogOut size={18} />
+                            Logout
+                        </button>
+                    ) : (
+                        <>
+                            <Link to="/login" className="btn btn-ghost">Login</Link>
+                            <Link to="/signup" className="btn btn-primary">
+                                Get Started
+                            </Link>
+                        </>
+                    )}
                 </div>
 
                 {/* Mobile Menu Toggle */}
@@ -75,15 +99,23 @@ function Navbar() {
                                     {link.label}
                                 </Link>
                             ))}
+                            {isLoggedIn ? (
+                                <button
+                                    className="mobile-menu-link"
+                                    onClick={() => {
+                                        handleLogout();
+                                        setIsMobileMenuOpen(false);
+                                    }}
+                                >
+                                    Logout
+                                </button>
+                            ) : (
+                                <>
+                                    <Link to="/login" className="mobile-menu-link" onClick={() => setIsMobileMenuOpen(false)}>Login</Link>
+                                    <Link to="/signup" className="mobile-menu-link" onClick={() => setIsMobileMenuOpen(false)}>Sign Up</Link>
+                                </>
+                            )}
                         </div>
-                        <Link
-                            to="/apply"
-                            className="btn btn-primary btn-lg"
-                            style={{ width: '100%', marginTop: '1rem' }}
-                            onClick={() => setIsMobileMenuOpen(false)}
-                        >
-                            Get Green Loan
-                        </Link>
                     </div>
                 )}
             </div>

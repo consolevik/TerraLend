@@ -18,7 +18,7 @@ import {
     Zap,
     RefreshCw
 } from 'lucide-react';
-import { submitLoanApplication, fetchGSTData, verifyKYC } from '../services/api';
+import { submitLoanApplication, fetchGSTData, verifyKYC, register, isAuthenticated, initiateVerification } from '../services/api';
 import './LoanInitiationPage.css';
 
 /**
@@ -59,6 +59,8 @@ function LoanInitiationPage() {
         projectDescription: '',
         estimatedSavings: '',
         projectLocation: '',
+        latitude: '',
+        longitude: '',
 
         // Step 4: Loan Details
         loanAmount: '',
@@ -139,11 +141,35 @@ function LoanInitiationPage() {
         }
     };
 
+    const handleLocationDetect = () => {
+        if (!navigator.geolocation) {
+            setError('Geolocation is not supported by your browser');
+            return;
+        }
+
+        setLoading(true);
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                setFormData(prev => ({
+                    ...prev,
+                    latitude: position.coords.latitude.toFixed(6),
+                    longitude: position.coords.longitude.toFixed(6)
+                }));
+                // Optional: You could call a reverse geocoding API here to fill projectLocation
+                setLoading(false);
+            },
+            (err) => {
+                setError('Unable to retrieve your location. Please enter manually.');
+                setLoading(false);
+            }
+        );
+    };
+
     const validateStep = () => {
         switch (currentStep) {
             case 1:
-                if (!formData.gstNumber || !formData.businessName) {
-                    setError('Please complete GST verification');
+                if (!formData.gstNumber || !formData.businessName || !formData.annualTurnover) {
+                    setError('Please complete all business details including Annual Turnover');
                     return false;
                 }
                 return true;
@@ -154,8 +180,8 @@ function LoanInitiationPage() {
                 }
                 return true;
             case 3:
-                if (!formData.greenObjective) {
-                    setError('Please select a green objective');
+                if (!formData.greenObjective || !formData.estimatedSavings) {
+                    setError('Please select a green objective and enter estimated savings');
                     return false;
                 }
                 return true;
@@ -182,18 +208,54 @@ function LoanInitiationPage() {
         setError(null);
     };
 
+
+
+    // ... (existing code matches until handleSubmit)
+
     const handleSubmit = async () => {
-        if (!validateStep()) return;
+        console.log('Submit button clicked'); // Debug log
+        if (!validateStep()) {
+            console.log('Validation failed'); // Debug log
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
 
         setLoading(true);
         setError(null);
 
         try {
+            // Check if user is logged in
+            if (!isAuthenticated()) {
+                console.log('User not authenticated, registering...'); // Debug log
+                if (!formData.password) {
+                    throw new Error('Password is required to create your account');
+                }
+                // Register the user first
+                await register(formData.email, formData.password);
+                console.log('Registration successful'); // Debug log
+            }
+
+            console.log('Submitting loan application...', formData); // Debug log
             const response = await submitLoanApplication(formData);
-            // Navigate to verification page with loan ID
-            navigate(`/verification/${response.loanId}`);
+            console.log('Loan submission successful', response); // Debug log
+
+            // Initiate AI Verification
+            try {
+                console.log('Initiating AI verification...');
+                await initiateVerification(response.loanId);
+                console.log('Verification initiated successfully');
+            } catch (verifyErr) {
+                console.error('Verification initiation failed:', verifyErr);
+                // Continue to dashboard anyway
+            }
+
+            // Navigate to dashboard
+            navigate('/dashboard');
         } catch (err) {
+            console.error('Submission error:', err); // Debug log
             setError(err.message || 'Failed to submit application. Please try again.');
+            window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll to error
+        } finally {
             setLoading(false);
         }
     };
@@ -403,6 +465,7 @@ function LoanInitiationPage() {
                                 </div>
                             )}
 
+
                             <div className="form-row">
                                 <div className="form-group">
                                     <label className="form-label">Email *</label>
@@ -427,6 +490,20 @@ function LoanInitiationPage() {
                                     />
                                 </div>
                             </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Create Password *</label>
+                                <input
+                                    type="password"
+                                    name="password"
+                                    className="form-input"
+                                    placeholder="Create a secure password"
+                                    value={formData.password || ''}
+                                    onChange={handleInputChange}
+                                />
+                                <p className="form-helper">You'll use this to log in to your dashboard</p>
+                            </div>
+
 
                             <div className="form-group">
                                 <label className="form-label">Business Address</label>
@@ -531,14 +608,49 @@ function LoanInitiationPage() {
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Project Location</label>
-                                    <input
-                                        type="text"
-                                        name="projectLocation"
-                                        className="form-input"
-                                        placeholder="City, State"
-                                        value={formData.projectLocation}
-                                        onChange={handleInputChange}
-                                    />
+                                    <div className="location-input-group">
+                                        <button
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={handleLocationDetect}
+                                            style={{ marginBottom: '0.5rem' }}
+                                        >
+                                            <Target size={16} />
+                                            Detect My Location
+                                        </button>
+                                        <div className="form-row">
+                                            <div className="form-group" style={{ flex: 1 }}>
+                                                <label className="form-label" style={{ fontSize: '0.75rem' }}>Latitude</label>
+                                                <input
+                                                    type="text"
+                                                    name="latitude"
+                                                    className="form-input"
+                                                    placeholder="e.g. 19.0760"
+                                                    value={formData.latitude}
+                                                    onChange={handleInputChange}
+                                                />
+                                            </div>
+                                            <div className="form-group" style={{ flex: 1 }}>
+                                                <label className="form-label" style={{ fontSize: '0.75rem' }}>Longitude</label>
+                                                <input
+                                                    type="text"
+                                                    name="longitude"
+                                                    className="form-input"
+                                                    placeholder="e.g. 72.8777"
+                                                    value={formData.longitude}
+                                                    onChange={handleInputChange}
+                                                />
+                                            </div>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            name="projectLocation"
+                                            className="form-input"
+                                            placeholder="City, State (Optional)"
+                                            value={formData.projectLocation}
+                                            onChange={handleInputChange}
+                                            style={{ marginTop: '0.5rem' }}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -7,6 +7,8 @@ import AIVerificationPage from './pages/AIVerificationPage'
 import DashboardPage from './pages/DashboardPage'
 import ImpactPage from './pages/ImpactPage'
 import AuditLogPage from './pages/AuditLogPage'
+import LoginPage from './pages/LoginPage'
+import SignupPage from './pages/SignupPage'
 
 function App() {
     return (
@@ -15,6 +17,8 @@ function App() {
             <main className="main-content">
                 <Routes>
                     <Route path="/" element={<LandingPage />} />
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/signup" element={<SignupPage />} />
                     <Route path="/apply" element={<LoanInitiationPage />} />
                     <Route path="/verification/:loanId" element={<AIVerificationPage />} />
                     <Route path="/dashboard" element={<DashboardPage />} />
