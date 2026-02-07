@@ -1,0 +1,115 @@
+.impact-metric {
+    display: flex;
+    gap: var(--spacing-4);
+    padding: var(--spacing-5);
+    background: white;
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-md);
+    transition: all var(--transition-base);
+}
+
+.impact-metric:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+}
+
+.impact-metric.loading {
+    align-items: center;
+}
+
+/* Icon */
+.metric-icon {
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-lg);
+}
+
+/* Color variants */
+.impact-metric.primary .metric-icon {
+    background: var(--color-primary-100);
+    color: var(--color-primary-600);
+}
+
+.impact-metric.accent .metric-icon {
+    background: var(--color-accent-100);
+    color: var(--color-accent-600);
+}
+
+.impact-metric.blue .metric-icon {
+    background: #dbeafe;
+    color: #2563eb;
+}
+
+.impact-metric.purple .metric-icon {
+    background: #ede9fe;
+    color: #7c3aed;
+}
+
+.impact-metric.rose .metric-icon {
+    background: #ffe4e6;
+    color: #e11d48;
+}
+
+.impact-metric.teal .metric-icon {
+    background: #ccfbf1;
+    color: #0d9488;
+}
+
+/* Content */
+.metric-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.metric-value {
+    display: flex;
+    align-items: baseline;
+    gap: var(--spacing-1);
+    margin-bottom: var(--spacing-1);
+}
+
+.metric-value .value {
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-bold);
+    color: var(--color-neutral-900);
+}
+
+.metric-value .unit {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-medium);
+    color: var(--color-neutral-500);
+}
+
+.metric-label {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-semibold);
+    color: var(--color-neutral-700);
+    margin-bottom: var(--spacing-1);
+}
+
+.metric-description {
+    font-size: var(--font-size-xs);
+    color: var(--color-neutral-500);
+    line-height: 1.5;
+}
+
+/* Compact variant */
+.impact-metric.compact {
+    padding: var(--spacing-4);
+    flex-direction: column;
+    text-align: center;
+}
+
+.impact-metric.compact .metric-icon {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto var(--spacing-3);
+}
+
+.impact-metric.compact .metric-value {
+    justify-content: center;
+}
