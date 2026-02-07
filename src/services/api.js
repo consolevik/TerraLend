@@ -1,7 +1,7 @@
 /**
  * TerraLend API Service
  * 
- * Centralized API communication layer.
+ * Centralized API communication layer with authentication support.
  * All API calls use the VITE_API_BASE_URL environment variable.
  * 
  * NOTE: This connects to a demo backend with simulated AI and blockchain.
@@ -10,6 +10,10 @@
 
 // API Base URL from environment variable - never hardcoded
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
+// Token storage key
+const TOKEN_KEY = 'terralend_token';
+const USER_KEY = 'terralend_user';
 
 /**
  * Custom error class for API errors
@@ -23,8 +27,53 @@ class ApiError extends Error {
     }
 }
 
+// ============================================
+// TOKEN MANAGEMENT
+// ============================================
+
 /**
- * Base fetch wrapper with error handling
+ * Get stored auth token
+ */
+export function getToken() {
+    return localStorage.getItem(TOKEN_KEY);
+}
+
+/**
+ * Store auth token
+ */
+export function setToken(token) {
+    localStorage.setItem(TOKEN_KEY, token);
+}
+
+/**
+ * Remove auth token (logout)
+ */
+export function removeToken() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+}
+
+/**
+ * Get stored user data
+ */
+export function getStoredUser() {
+    const user = localStorage.getItem(USER_KEY);
+    return user ? JSON.parse(user) : null;
+}
+
+/**
+ * Check if user is authenticated
+ */
+export function isAuthenticated() {
+    return !!getToken();
+}
+
+// ============================================
+// BASE API REQUEST
+// ============================================
+
+/**
+ * Base fetch wrapper with error handling and auth
  */
 async function apiRequest(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
@@ -37,13 +86,25 @@ async function apiRequest(endpoint, options = {}) {
         ...options,
     };
 
+    // Add auth token if available
+    const token = getToken();
+    if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+    }
+
     try {
         const response = await fetch(url, config);
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
+
+            // Handle unauthorized (token expired)
+            if (response.status === 401) {
+                removeToken();
+            }
+
             throw new ApiError(
-                errorData.message || `API Error: ${response.status}`,
+                errorData.error || errorData.message || `API Error: ${response.status}`,
                 response.status,
                 errorData
             );
@@ -64,6 +125,84 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 // ============================================
+// AUTHENTICATION ENDPOINTS
+// ============================================
+
+/**
+ * Register a new user
+ * @param {string} email - User email
+ * @param {string} password - User password
+ */
+export async function register(email, password) {
+    const response = await apiRequest('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+    });
+
+    if (response.success && response.token) {
+        setToken(response.token);
+        localStorage.setItem(USER_KEY, JSON.stringify(response.user));
+    }
+
+    return response;
+}
+
+/**
+ * Login user
+ * @param {string} email - User email
+ * @param {string} password - User password
+ */
+export async function login(email, password) {
+    const response = await apiRequest('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+    });
+
+    if (response.success && response.token) {
+        setToken(response.token);
+        localStorage.setItem(USER_KEY, JSON.stringify(response.user));
+    }
+
+    return response;
+}
+
+/**
+ * Logout user
+ */
+export function logout() {
+    removeToken();
+}
+
+/**
+ * Get current user profile
+ */
+export async function getCurrentUser() {
+    return apiRequest('/api/auth/me');
+}
+
+// ============================================
+// PROFILE ENDPOINTS
+// ============================================
+
+/**
+ * Save or update user profile (business + KYC)
+ * @param {Object} profileData - Profile data
+ */
+export async function saveProfile(profileData) {
+    return apiRequest('/api/profile', {
+        method: 'POST',
+        body: JSON.stringify(profileData),
+    });
+}
+
+/**
+ * Get user's profile data
+ */
+export async function getProfile() {
+    return apiRequest('/api/profile');
+}
+
+// ============================================
 // LOAN API ENDPOINTS
 // ============================================
 
@@ -79,6 +218,15 @@ export async function submitLoanApplication(loanData) {
 }
 
 /**
+ * Get all loans for current user
+ * @param {string} status - Optional status filter
+ */
+export async function getLoans(status = null) {
+    const endpoint = status ? `/api/loans?status=${status}` : '/api/loans';
+    return apiRequest(endpoint);
+}
+
+/**
  * Get loan details by ID
  * @param {string} loanId - Loan ID
  */
@@ -87,7 +235,7 @@ export async function getLoanById(loanId) {
 }
 
 /**
- * Get all loans for a user
+ * Get all loans for a user (legacy compatibility)
  * @param {string} userId - User ID
  * @param {string} role - User role (borrower, lender, regulator)
  */

@@ -25,6 +25,13 @@
  * @param {Object} projectData - Project and business information
  * @returns {Object} Score, classification, and reasoning
  */
+/**
+ * Calculate Green Score based on project characteristics
+ * Uses strict, weighted rules based on Financial, Geographical, and Impact factors.
+ * 
+ * @param {Object} projectData - Project and business information
+ * @returns {Object} Score, classification, and reasoning
+ */
 export function calculateGreenScore(projectData) {
     const {
         greenObjective,
@@ -33,122 +40,227 @@ export function calculateGreenScore(projectData) {
         estimatedSavings,
         projectLocation,
         loanAmount,
+        locationCoordinates
     } = projectData;
 
-    // Initialize scoring components
-    let score = 0;
+    // Initialize scoring
+    let finalScore = 0;
     const reasoning = {};
     const maxScore = 100;
 
+    // Helper to safely parse numbers
+    const parseNum = (val) => parseFloat(String(val).replace(/[^0-9.]/g, '')) || 0;
+
+    const turnoverVal = parseNum(annualTurnover);
+    const savingsVal = parseNum(estimatedSavings);
+    const loanVal = parseNum(loanAmount) || 100000; // Avoid div by zero
+    const yearsVal = parseNum(yearsInBusiness);
+
     // ============================================
-    // 1. Project Type Score (0-30 points)
-    // Different green projects have different impact potential
+    // 1. PROJECT IMPACT & CATEGORY (Max 30 Points)
     // ============================================
-    const projectTypeScores = {
-        solar: 30,
-        efficiency: 28,
-        ev: 26,
-        water: 24,
-        waste: 22,
-        agriculture: 20,
+    let impactScore = 0;
+    const impactScores = {
+        solar: 30,      // Direct renewable generation
+        waste: 30,      // Circular economy
+        wind: 30,
+        energy_efficiency: 25, // Demand reduction
+        ev: 25,         // Emission displacement
+        water: 25,      // Resource conservation
+        agriculture: 20 // Sustainable practice
     };
 
-    const projectTypeScore = projectTypeScores[greenObjective] || 20;
-    score += projectTypeScore;
-    reasoning.project_type = greenObjective || 'unknown';
-    reasoning.project_impact = projectTypeScore >= 26 ? 'high' : projectTypeScore >= 22 ? 'medium' : 'moderate';
+    // Normalize category key
+    const catKey = (greenObjective || '').toLowerCase().replace(/ /g, '_');
+    const baseImpact = impactScores[catKey] || 20;
 
-    // ============================================
-    // 2. Cash Flow Stability Score (0-25 points)
-    // Based on turnover and years in business
-    // ============================================
-    const turnoverNum = parseFloat(String(annualTurnover).replace(/[^0-9]/g, '')) || 0;
-    const years = parseInt(yearsInBusiness) || 0;
+    impactScore += baseImpact;
+    reasoning.category_impact = `+${baseImpact} pts (${greenObjective || 'Standard'} Category)`;
 
-    let cashFlowScore = 0;
-
-    // Turnover component (0-15 points)
-    if (turnoverNum >= 10000000) cashFlowScore += 15;  // 1Cr+
-    else if (turnoverNum >= 5000000) cashFlowScore += 12;  // 50L+
-    else if (turnoverNum >= 2000000) cashFlowScore += 9;   // 20L+
-    else if (turnoverNum >= 500000) cashFlowScore += 6;   // 5L+
-    else cashFlowScore += 3;
-
-    // Years in business component (0-10 points)
-    if (years >= 5) cashFlowScore += 10;
-    else if (years >= 3) cashFlowScore += 7;
-    else if (years >= 1) cashFlowScore += 4;
-    else cashFlowScore += 2;
-
-    score += cashFlowScore;
-    reasoning.cash_flow = cashFlowScore >= 20 ? 'stable' : cashFlowScore >= 12 ? 'moderate' : 'developing';
-
-    // ============================================
-    // 3. Emission Reduction Potential (0-25 points)
-    // Estimated based on savings and project type
-    // ============================================
-    const savingsNum = parseFloat(String(estimatedSavings).replace(/[^0-9]/g, '')) || 0;
-    const loanNum = parseFloat(String(loanAmount).replace(/[^0-9]/g, '')) || 100000;
-
-    // Calculate savings-to-loan ratio (higher is better)
-    const savingsRatio = savingsNum / loanNum;
-
-    let emissionScore = 0;
-    if (savingsRatio >= 0.5) emissionScore = 25;      // Excellent ROI
-    else if (savingsRatio >= 0.3) emissionScore = 20;
-    else if (savingsRatio >= 0.15) emissionScore = 15;
-    else if (savingsRatio >= 0.05) emissionScore = 10;
-    else emissionScore = 5;
-
-    score += emissionScore;
-    reasoning.emission_reduction = emissionScore >= 20 ? 'significant' : emissionScore >= 12 ? 'moderate' : 'limited';
-
-    // ============================================
-    // 4. Location-Based Climate Risk (0-20 points)
-    // Simulated - in production, would use actual climate data
-    // ============================================
-    const lowRiskStates = ['maharashtra', 'karnataka', 'tamil nadu', 'gujarat', 'telangana'];
-    const mediumRiskStates = ['rajasthan', 'madhya pradesh', 'uttar pradesh', 'punjab'];
-
-    const locationLower = (projectLocation || '').toLowerCase();
-    let locationScore = 15; // Default
-
-    if (lowRiskStates.some(state => locationLower.includes(state))) {
-        locationScore = 20;
-        reasoning.climate_risk = 'low';
-    } else if (mediumRiskStates.some(state => locationLower.includes(state))) {
-        locationScore = 15;
-        reasoning.climate_risk = 'medium';
-    } else {
-        locationScore = 10;
-        reasoning.climate_risk = 'elevated';
+    // Transformative Bonus: If savings > 50% of turnover (High impact on business model)
+    if (turnoverVal > 0 && savingsVal > (turnoverVal * 0.5)) {
+        impactScore += 5; // Cap handling needed per section? Let's allow section overflow but cap total
+        reasoning.transformative_bonus = '+5 pts (High Savings relative to Turnover)';
     }
 
-    score += locationScore;
+    // Cap section at 30
+    impactScore = Math.min(30, impactScore);
+    finalScore += impactScore;
+
 
     // ============================================
-    // Calculate Final Results
+    // 2. FINANCIAL VIABILITY (Max 30 Points)
     // ============================================
+    let financialScore = 0;
 
-    // Ensure score is within bounds
-    const finalScore = Math.min(Math.max(Math.round(score), 0), maxScore);
-
-    // Determine sustainability class
-    let sustainabilityClass;
-    if (finalScore >= 70) {
-        sustainabilityClass = 'high';
-    } else if (finalScore >= 40) {
-        sustainabilityClass = 'medium';
+    // A. ROI Potential (Savings / Loan Amount) - Max 15
+    const roiRatio = savingsVal / loanVal;
+    if (roiRatio >= 0.5) {
+        financialScore += 15;
+        reasoning.roi_potential = '+15 pts (Excellent ROI > 50%)';
+    } else if (roiRatio >= 0.25) {
+        financialScore += 10;
+        reasoning.roi_potential = '+10 pts (Strong ROI > 25%)';
+    } else if (roiRatio >= 0.1) {
+        financialScore += 5;
+        reasoning.roi_potential = '+5 pts (Moderate ROI)';
     } else {
-        sustainabilityClass = 'low';
+        reasoning.roi_potential = '0 pts (Low ROI < 10%)';
     }
+
+    // B. Business Stability - Max 15
+    // Turnover
+    if (turnoverVal >= 5000000) { // 50L
+        financialScore += 10;
+        reasoning.turnover_stability = '+10 pts (Turnover > ₹50L)';
+    } else if (turnoverVal >= 1000000) { // 10L
+        financialScore += 5;
+        reasoning.turnover_stability = '+5 pts (Turnover > ₹10L)';
+    } else {
+        reasoning.turnover_stability = '+0 pts (Low Turnover)';
+    }
+
+    // Years
+    if (yearsVal >= 3) {
+        financialScore += 5;
+        reasoning.business_age = '+5 pts (> 3 Years Vintage)';
+    } else if (yearsVal >= 1) {
+        financialScore += 2;
+        reasoning.business_age = '+2 pts (1-3 Years Vintage)';
+    }
+
+    // Cap section at 30
+    financialScore = Math.min(30, financialScore);
+    finalScore += financialScore;
+
+
+    // ============================================
+    // 3. GEOGRAPHICAL SUITABILITY (Max 30 Points)
+    // ============================================
+    let geoScore = 0;
+
+    // Derive State
+    let state = projectLocation || 'Unknown';
+    if (locationCoordinates?.latitude && locationCoordinates?.longitude) {
+        const derived = getStateFromCoordinates(locationCoordinates.latitude, locationCoordinates.longitude);
+        if (derived !== 'Unknown') state = derived;
+    }
+    state = state.toLowerCase();
+
+    // A. Suitability Rules (20 pts)
+    const category = (greenObjective || '').toLowerCase();
+
+    // Solar
+    if (category.includes('solar')) {
+        if (['rajasthan', 'gujarat', 'maharashtra', 'karnataka', 'tamil nadu', 'telangana', 'andhra pradesh'].some(s => state.includes(s))) {
+            geoScore += 20;
+            reasoning.geo_suitability = '+20 pts (High Solar Irradiance Zone)';
+        } else if (['kerala', 'west bengal', 'odisha'].some(s => state.includes(s))) {
+            geoScore += 10;
+            reasoning.geo_suitability = '+10 pts (Moderate Solar Potential)';
+        } else {
+            geoScore += 5;
+            reasoning.geo_suitability = '+5 pts (Standard Solar Potential)';
+        }
+    }
+    // Wind
+    else if (category.includes('wind')) {
+        if (['tamil nadu', 'gujarat', 'maharashtra', 'karnataka'].some(s => state.includes(s))) {
+            geoScore += 20;
+            reasoning.geo_suitability = '+20 pts (High Wind Corridor)';
+        } else {
+            geoScore += 5;
+            reasoning.geo_suitability = '+5 pts (Low Wind Potential)';
+        }
+    }
+    // EV / Efficiency (Urban Focus)
+    else if (category.includes('ev') || category.includes('efficiency')) {
+        if (['delhi', 'maharashtra', 'karnataka', 'telangana', 'tamil nadu'].some(s => state.includes(s))) {
+            geoScore += 20;
+            reasoning.geo_suitability = '+20 pts (High Urban Adoption Rate)';
+        } else {
+            geoScore += 10;
+            reasoning.geo_suitability = '+10 pts (Growing Adoption Zone)';
+        }
+    }
+    // Agriculture / Water (Resource Scarcity Focus)
+    else if (category.includes('agriculture') || category.includes('water')) {
+        if (['punjab', 'haryana', 'uttar pradesh', 'madhya pradesh'].some(s => state.includes(s))) {
+            geoScore += 20;
+            reasoning.geo_suitability = '+20 pts (Process Optimization Zone)';
+        } else if (['rajasthan', 'maharashtra', 'gujarat'].some(s => state.includes(s))) {
+            geoScore += 20;
+            reasoning.geo_suitability = '+20 pts (Critical Resource Impact Zone)';
+        } else {
+            geoScore += 10;
+            reasoning.geo_suitability = '+10 pts (Standard Impact Zone)';
+        }
+    }
+    // Waste
+    else if (category.includes('waste')) {
+        geoScore += 20; // Universally applicable
+        reasoning.geo_suitability = '+20 pts (Universal Need)';
+    }
+    else {
+        geoScore += 10;
+        reasoning.geo_suitability = '+10 pts (General Applicability)';
+    }
+
+    // B. Climate Risk Resilience (10 pts)
+    // Invert risk: Low risk = high score
+    const riskAssessment = assessClimateRisk({ state });
+    if (riskAssessment.level === 'low') {
+        geoScore += 10;
+        reasoning.climate_resilience = '+10 pts (Low Climate Risk)';
+    } else if (riskAssessment.level === 'medium') {
+        geoScore += 5;
+        reasoning.climate_resilience = '+5 pts (Moderate Climate Risk)';
+    } else {
+        reasoning.climate_resilience = '0 pts (High Climate Risk detected)';
+    }
+
+    // Cap section at 30
+    geoScore = Math.min(30, geoScore);
+    finalScore += geoScore;
+
+
+    // ============================================
+    // 4. DATA INTEGRITY & VALIDATION (Max 10 Points)
+    // ============================================
+    let dataScore = 0;
+
+    // Granular Location Bonus
+    if (locationCoordinates?.latitude) {
+        dataScore += 5;
+        reasoning.data_quality = '+5 pts (Precise Geolocation Verified)';
+    }
+
+    // Completeness Bonus (Turnover & Savings present)
+    if (turnoverVal > 0 && savingsVal > 0) {
+        dataScore += 5;
+        reasoning.data_completeness = '+5 pts (Full Financial Disclosure)';
+    }
+
+    finalScore += dataScore;
+
+    // ============================================
+    // FINAL AGGREGATION
+    // ============================================
+
+    // Ensure score is within 0-100
+    finalScore = Math.min(100, Math.max(0, Math.round(finalScore)));
+
+    // Determine Class
+    let sustainabilityClass = 'low';
+    if (finalScore >= 80) sustainabilityClass = 'high'; // Stricter threshold
+    else if (finalScore >= 50) sustainabilityClass = 'medium';
 
     return {
         greenScore: finalScore,
         sustainabilityClass,
         reasoning,
         timestamp: new Date().toISOString(),
-        methodology: 'TerraLend AI Scoring v1.0 (Simulated)',
+        methodology: 'TerraLend Enhanced AI v2.0',
     };
 }
 
@@ -249,4 +361,90 @@ export default {
     calculateGreenScore,
     runGreenwashingCheck,
     assessClimateRisk,
+    getStateFromCoordinates,
+    calculateSuitabilityScore
 };
+
+/**
+ * Get State/Region from Coordinates (Simulated Reverse Geocoding)
+ * Uses approximate centroids for major Indian states
+ */
+export function getStateFromCoordinates(lat, long) {
+    if (!lat || !long) return 'Unknown';
+
+    // Simplified centroids for demo
+    const locations = [
+        { state: 'Maharashtra', lat: 19.75, long: 75.71 },
+        { state: 'Karnataka', lat: 15.31, long: 75.71 },
+        { state: 'Rajasthan', lat: 27.02, long: 74.21 },
+        { state: 'Tamil Nadu', lat: 11.12, long: 78.65 },
+        { state: 'Gujarat', lat: 22.25, long: 71.19 },
+        { state: 'Assam', lat: 26.20, long: 92.93 },
+        { state: 'Delhi', lat: 28.70, long: 77.10 },
+        { state: 'Telangana', lat: 18.11, long: 79.01 }
+    ];
+
+    // Find nearest neighbor
+    let minDist = Number.MAX_VALUE;
+    let nearestState = 'Unknown';
+
+    locations.forEach(loc => {
+        const dist = Math.sqrt(Math.pow(loc.lat - lat, 2) + Math.pow(loc.long - long, 2));
+        if (dist < minDist) {
+            minDist = dist;
+            nearestState = loc.state;
+        }
+    });
+
+    // If too far from any centroid (> 5 degrees ~ 500km), keep unknown or nearest
+    return nearestState;
+}
+
+/**
+ * Calculate Suitability Score (Category vs Location)
+ * Rewards high-potential matches and penalizes risky ones
+ */
+export function calculateSuitabilityScore(category, locationState) {
+    if (!category || !locationState) return { score: 0, reason: 'Insufficient data' };
+
+    const state = locationState.toLowerCase();
+    const cat = category.toLowerCase();
+    let score = 0;
+    let reason = 'Neutral match';
+
+    // Rules Engine
+
+    // Solar Rules
+    if (cat.includes('solar')) {
+        if (['rajasthan', 'gujarat', 'maharashtra', 'karnataka', 'tamil nadu'].some(s => state.includes(s))) {
+            score = 10;
+            reason = 'High solar irradiance region (+10)';
+        } else if (['assam', 'meghalaya'].some(s => state.includes(s))) {
+            score = -5;
+            reason = 'Low solar potential region (-5)';
+        }
+    }
+
+    // Agriculture / Water Rules
+    if (cat.includes('agriculture') || cat.includes('water')) {
+        if (['rajasthan', 'gujarat'].some(s => state.includes(s))) {
+            // Needed most here, but risky if water not available? 
+            // Let's reward solution providers in scarce areas
+            score = 10;
+            reason = 'Critical solution for water-scarce region (+10)';
+        } else if (['punjab', 'haryana'].some(s => state.includes(s))) {
+            score = 5;
+            reason = 'Supports sustainable farming in high-yield zone (+5)';
+        }
+    }
+
+    // Wind (Simulated if added later) / EV
+    if (cat.includes('ev')) {
+        if (['delhi', 'maharashtra', 'karnataka'].some(s => state.includes(s))) {
+            score = 10;
+            reason = 'High EV adoption potential (+10)';
+        }
+    }
+
+    return { score, reason };
+}

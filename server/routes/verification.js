@@ -1,12 +1,12 @@
-/**
- * Verification API Routes
- * Handles AI-powered green scoring and verification
- */
-
 import express from 'express';
-import { loans, verifications } from '../services/dataStore.js';
+import LoanApplication from '../models/LoanApplication.js';
 import { calculateGreenScore, runGreenwashingCheck, assessClimateRisk } from '../services/aiScoringService.js';
 import { recordEvent } from '../services/blockchainService.js';
+import { isDbConnected } from '../config/db.js';
+import { localLoans } from '../services/store.js';
+
+// In-memory verification storage (fallback/cache)
+export const localVerifications = new Map();
 
 const router = express.Router();
 
@@ -17,28 +17,35 @@ const router = express.Router();
 router.post('/green-score', async (req, res) => {
     try {
         const { loanId } = req.body;
+        let loan = null;
 
-        // Get loan data
-        const loan = loans.get(loanId);
+        // 1. Find Loan (MongoDB or Local)
+        if (isDbConnected()) {
+            loan = await LoanApplication.findOne({
+                $or: [{ loanId: loanId }, { _id: loanId.match(/^[0-9a-fA-F]{24}$/) ? loanId : null }]
+            });
+        }
+
+        if (!loan) {
+            // Check local store
+            loan = localLoans.find(l => l.loanId === loanId || l._id === loanId);
+        }
+
         if (!loan) {
             return res.status(404).json({ error: 'Loan not found' });
         }
 
-        // Calculate Green Score
+        // 2. Calculate Scores
         const scoreResult = calculateGreenScore(loan);
-
-        // Run greenwashing check
         const greenwashingResult = runGreenwashingCheck(loan);
-
-        // Assess climate risk
         const climateRisk = assessClimateRisk({
             city: loan.projectLocation?.split(',')[0] || '',
             state: loan.projectLocation?.split(',')[1] || '',
         });
 
-        // Store verification result
+        // 3. Prepare Verification Result
         const verification = {
-            loanId,
+            loanId: loan.loanId,
             completed: true,
             greenScore: scoreResult.greenScore,
             sustainabilityClass: scoreResult.sustainabilityClass,
@@ -48,24 +55,28 @@ router.post('/green-score', async (req, res) => {
             completedAt: new Date().toISOString(),
         };
 
-        verifications.set(loanId, verification);
+        // 4. Update Loan Status & Save
+        if (isDbConnected() && loan.save) {
+            loan.status = 'approved'; // Auto-approve if verified? Or just 'active'? Let's keep 'approved' for now
+            loan.aiScore = scoreResult.greenScore;
+            loan.sustainabilityClass = scoreResult.sustainabilityClass;
+            await loan.save();
+        } else {
+            // Update local object
+            loan.status = 'approved';
+            loan.aiScore = scoreResult.greenScore;
+            loan.sustainabilityClass = scoreResult.sustainabilityClass;
+            loan.updatedAt = new Date().toISOString();
+        }
 
-        // Update loan status
-        loan.status = 'verified';
-        loan.updatedAt = new Date().toISOString();
-        loans.set(loanId, loan);
+        // Store verification result in memory for quick retrieval
+        localVerifications.set(loan.loanId, verification);
 
-        // Record on blockchain
+        // 5. Record Blockchain Event
         recordEvent({
             eventType: 'verification_complete',
-            loanId,
-            description: `AI Verification completed: Green Score ${scoreResult.greenScore} (${scoreResult.sustainabilityClass === 'high' ? 'High' : scoreResult.sustainabilityClass === 'medium' ? 'Medium' : 'Low'} Impact)`,
-        });
-
-        recordEvent({
-            eventType: 'greenwashing_check',
-            loanId,
-            description: `Greenwashing check ${greenwashingResult.passed ? 'passed' : 'flagged'}: Authenticity Score ${greenwashingResult.confidenceScore}%`,
+            loanId: loan.loanId,
+            description: `AI Verification completed: Green Score ${scoreResult.greenScore}`,
         });
 
         res.json({
@@ -86,10 +97,29 @@ router.get('/status/:loanId', async (req, res) => {
     try {
         const { loanId } = req.params;
 
-        const verification = verifications.get(loanId);
+        // Check local cache first
+        let verification = localVerifications.get(loanId);
 
         if (!verification) {
-            // Return pending status if not verified yet
+            // If checking from DB, we might need to reconstruct or store verification in DB too
+            // For now, simpler to rely on the LoanApplication having the score
+            // But the UI expects the full verification object
+
+            // If we authenticated against DB, we can check if loan has score
+            if (isDbConnected()) {
+                const loan = await LoanApplication.findOne({ loanId });
+                if (loan && loan.aiScore !== undefined) {
+                    // Reconstruct basic verification status if not in cache
+                    return res.json({
+                        loanId,
+                        completed: true,
+                        greenScore: loan.aiScore,
+                        sustainabilityClass: loan.sustainabilityClass,
+                        status: 'completed'
+                    });
+                }
+            }
+
             return res.json({
                 loanId,
                 completed: false,
@@ -106,28 +136,10 @@ router.get('/status/:loanId', async (req, res) => {
 
 /**
  * POST /api/verify/greenwashing
- * Run standalone greenwashing check
  */
 router.post('/greenwashing', async (req, res) => {
-    try {
-        const { loanId } = req.body;
-
-        const loan = loans.get(loanId);
-        if (!loan) {
-            return res.status(404).json({ error: 'Loan not found' });
-        }
-
-        const result = runGreenwashingCheck(loan);
-
-        res.json({
-            success: true,
-            loanId,
-            result,
-        });
-    } catch (error) {
-        console.error('Error in greenwashing check:', error);
-        res.status(500).json({ error: 'Greenwashing check failed' });
-    }
+    // Kept simple for now
+    res.json({ success: true, message: 'Endpoint deprecated, use green-score' });
 });
 
 export default router;
