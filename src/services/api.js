@@ -8,8 +8,12 @@
  * In production, these would connect to real AI/ML services and blockchain networks.
  */
 
-// API Base URL from environment variable - never hardcoded
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+// API Base URL from environment variable
+// If empty, it uses relative path (proxy) which avoids CORS issues
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
+console.log('[TerraLend] API Service initialized');
+console.log('[TerraLend] Base URL:', API_BASE_URL || '(Relative/Proxy)');
 
 // Token storage key
 const TOKEN_KEY = 'terralend_token';
@@ -112,6 +116,7 @@ async function apiRequest(endpoint, options = {}) {
 
         return await response.json();
     } catch (error) {
+        console.error('FULL API ERROR DETAILS:', error);
         if (error instanceof ApiError) {
             throw error;
         }

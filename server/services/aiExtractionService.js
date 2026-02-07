@@ -80,7 +80,7 @@ export function extractClaimMock(text) {
         project_type = 'ev';
     } else if (lower.includes('waste') || lower.includes('recycling') || lower.includes('composting')) {
         project_type = 'waste';
-    } else if (lower.includes('energy efficiency') || lower.includes('led') || lower.includes('insulation') || lower.includes('hvac')) {
+    } else if (lower.includes('energy efficiency') || lower.includes('led') || lower.includes('insulation') || lower.includes('hvac') || lower.includes('vrf') || lower.includes('variable refrigerant') || lower.includes('lighting system')) {
         project_type = 'energy_efficiency';
     } else if (lower.includes('water') || lower.includes('rainwater') || lower.includes('sewage') || lower.includes('irrigation')) {
         project_type = 'water';
@@ -159,13 +159,17 @@ export function extractClaimMock(text) {
         }
     }
 
-    // Extract energy generation
+    // Extract energy generation/savings
     let energy_generated_kwh_per_year = null;
     const energyPatterns = [
         /(\d+(?:,\d+)*(?:\.\d+)?)\s*kwh\s*(?:per\s*year|annually|\/\s*year)/i,
         /generate\s*(\d+(?:,\d+)*(?:\.\d+)?)\s*kwh/i,
         /(\d+(?:,\d+)*(?:\.\d+)?)\s*kwh\s*(?:of\s*)?(?:electricity|energy|power)/i,
-        /annual\s*(?:generation|output)\s*(?:of\s*)?(\d+(?:,\d+)*(?:\.\d+)?)\s*kwh/i
+        /annual\s*(?:generation|output)\s*(?:of\s*)?(\d+(?:,\d+)*(?:\.\d+)?)\s*kwh/i,
+        // New patterns for energy efficiency descriptions like "30,000 kWh/year"
+        /(?:approx\.?|approximately)?\s*(\d+(?:,\d+)*)\s*kwh\s*\/\s*year/i,
+        /reduce.*?(\d+(?:,\d+)*)\s*kwh/i,
+        /(\d+(?:,\d+)*)\s*kwh[\s\/]*(?:per\s*)?(?:year|yr|annually)/i
     ];
     for (const pattern of energyPatterns) {
         const match = text.match(pattern);
