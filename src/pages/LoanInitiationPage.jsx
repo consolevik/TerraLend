@@ -86,13 +86,33 @@ function LoanInitiationPage() {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        let newValue = value;
+
+        // 1. Strict Numeric Enforcements
+        // Allows only digits 0-9. Removes any other character immediately.
+        if (['annualTurnover', 'yearsInBusiness', 'estimatedSavings', 'loanAmount', 'pincode', 'phone', 'aadhaarNumber'].includes(name)) {
+            newValue = value.replace(/[^0-9]/g, '');
+        }
+
+        // 2. Uppercase Enforcement for IDs
+        if (['gstNumber', 'panNumber'].includes(name)) {
+            newValue = value.toUpperCase();
+        }
+
+        // 3. Specific Length Caps (Double check to prevent paste overflow)
+        if (name === 'pincode' && newValue.length > 6) newValue = newValue.slice(0, 6);
+        if (name === 'panNumber' && newValue.length > 10) newValue = newValue.slice(0, 10);
+        if (name === 'aadhaarNumber' && newValue.length > 12) newValue = newValue.slice(0, 12);
+        if (name === 'gstNumber' && newValue.length > 15) newValue = newValue.slice(0, 15);
+        if (name === 'phone' && newValue.length > 10) newValue = newValue.slice(0, 10);
+
+        setFormData(prev => ({ ...prev, [name]: newValue }));
         setError(null);
     };
 
     const handleGSTFetch = async () => {
-        if (!formData.gstNumber || formData.gstNumber.length < 15) {
-            setError('Please enter a valid 15-character GST number');
+        if (!formData.gstNumber || formData.gstNumber.length !== 15) {
+            setError('GST Number must be exactly 15 characters');
             return;
         }
 
@@ -105,7 +125,7 @@ function LoanInitiationPage() {
                 ...prev,
                 businessName: gstData.businessName,
                 businessType: gstData.businessType,
-                annualTurnover: gstData.annualTurnover,
+                annualTurnover: String(gstData.annualTurnover || ''), // Ensure string for input
                 address: gstData.address,
                 city: gstData.city,
                 state: gstData.state,
@@ -120,8 +140,12 @@ function LoanInitiationPage() {
     };
 
     const handleKYCVerify = async () => {
-        if (!formData.panNumber || !formData.aadhaarNumber) {
-            setError('Please enter PAN and Aadhaar numbers');
+        if (!formData.panNumber || formData.panNumber.length !== 10) {
+            setError('PAN Number must be exactly 10 characters');
+            return;
+        }
+        if (!formData.aadhaarNumber || formData.aadhaarNumber.length !== 12) {
+            setError('Aadhaar Number must be exactly 12 digits');
             return;
         }
 
@@ -441,10 +465,10 @@ function LoanInitiationPage() {
                                             type="text"
                                             name="aadhaarNumber"
                                             className="form-input"
-                                            placeholder="e.g., 1234 5678 9012"
+                                            placeholder="e.g., 123456789012"
                                             value={formData.aadhaarNumber}
                                             onChange={handleInputChange}
-                                            maxLength={14}
+                                            maxLength={12}
                                         />
                                     </div>
                                 </div>
