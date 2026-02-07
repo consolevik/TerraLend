@@ -47,6 +47,7 @@ import impactRouter from './routes/impact.js';
 import blockchainRouter from './routes/blockchain.js';
 import mockRouter from './routes/mock.js';
 import climateRouter from './routes/climate.js';
+import aiRouter from './routes/ai.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -124,6 +125,9 @@ app.use('/api/mock', mockRouter);
 
 // Climate risk assessment endpoints
 app.use('/api/climate', climateRouter);
+
+// AI extraction endpoints (sustainability claim extraction)
+app.use('/api/ai', aiRouter);
 
 // ============================================
 // Error Handling

@@ -16,9 +16,11 @@ import {
     Droplets,
     Sprout,
     Zap,
-    RefreshCw
+    RefreshCw,
+    Sparkles,
+    Info
 } from 'lucide-react';
-import { submitLoanApplication, fetchGSTData, verifyKYC, register, isAuthenticated, initiateVerification } from '../services/api';
+import { submitLoanApplication, fetchGSTData, verifyKYC, register, isAuthenticated, initiateVerification, extractSustainabilityClaim } from '../services/api';
 import './LoanInitiationPage.css';
 
 /**
@@ -34,6 +36,11 @@ function LoanInitiationPage() {
     const [error, setError] = useState(null);
     const [gstVerified, setGstVerified] = useState(false);
     const [kycVerified, setKycVerified] = useState(false);
+
+    // AI Extraction state
+    const [aiExtracting, setAiExtracting] = useState(false);
+    const [aiExtractedData, setAiExtractedData] = useState(null);
+    const [aiConfidence, setAiConfidence] = useState(null);
 
     const [formData, setFormData] = useState({
         // Step 1: Business Details
@@ -263,6 +270,67 @@ function LoanInitiationPage() {
     const selectGreenObjective = (objectiveId) => {
         setFormData(prev => ({ ...prev, greenObjective: objectiveId }));
         setError(null);
+    };
+
+    // AI-assisted extraction of sustainability claim data
+    const handleAIExtraction = async () => {
+        if (!formData.projectDescription || formData.projectDescription.trim().length < 20) {
+            setError('Please enter a more detailed project description (at least 20 characters) for AI extraction.');
+            return;
+        }
+
+        setAiExtracting(true);
+        setError(null);
+
+        try {
+            const result = await extractSustainabilityClaim(formData.projectDescription);
+
+            if (result.success && result.extracted_claim) {
+                const claim = result.extracted_claim;
+
+                // Map extracted project_type to our greenObjective ids
+                let mappedObjective = formData.greenObjective;
+                if (claim.project_type) {
+                    const typeMap = {
+                        'solar': 'solar',
+                        'ev': 'ev',
+                        'waste': 'waste',
+                        'energy_efficiency': 'efficiency',
+                        'water': 'water'
+                    };
+                    mappedObjective = typeMap[claim.project_type] || formData.greenObjective;
+                }
+
+                // Store AI extracted data for display
+                setAiExtractedData(claim);
+                setAiConfidence(result.extraction_confidence);
+
+                // Auto-fill form fields from extracted data
+                setFormData(prev => ({
+                    ...prev,
+                    greenObjective: mappedObjective || prev.greenObjective,
+                    // Store extracted fields in formData for submission
+                    aiExtractedVendor: claim.vendor,
+                    aiExtractedCapacity: claim.capacity_kw,
+                    aiExtractedCO2: claim.claimed_impact?.co2_saved_tonnes_per_year,
+                    aiExtractedEnergy: claim.claimed_impact?.energy_generated_kwh_per_year,
+                    aiExtractedCertifications: claim.certifications,
+                }));
+            }
+        } catch (err) {
+            console.error('AI extraction error:', err);
+            setError('AI extraction failed. Please fill in the details manually.');
+        } finally {
+            setAiExtracting(false);
+        }
+    };
+
+    // Get confidence color for display
+    const getConfidenceColor = (confidence) => {
+        if (confidence >= 0.85) return '#22c55e';
+        if (confidence >= 0.6) return '#eab308';
+        if (confidence >= 0.4) return '#f97316';
+        return '#ef4444';
     };
 
     return (
@@ -582,19 +650,113 @@ function LoanInitiationPage() {
                                 ))}
                             </div>
 
-                            <div className="form-group" style={{ marginTop: 'var(--spacing-6)' }}>
-                                <label className="form-label">Project Description</label>
-                                <textarea
-                                    name="projectDescription"
-                                    className="form-input"
-                                    rows={4}
-                                    placeholder="Describe your green project in detail..."
-                                    value={formData.projectDescription}
-                                    onChange={handleInputChange}
-                                />
+                            {/* AI-Assisted Extraction Section */}
+                            <div className="ai-extraction-section" style={{ marginTop: 'var(--spacing-6)' }}>
+                                <div className="form-group">
+                                    <label className="form-label">
+                                        Project Description
+                                        <span className="ai-badge" style={{ marginLeft: '0.5rem', fontSize: '0.75rem', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: 'white', padding: '2px 8px', borderRadius: '12px', verticalAlign: 'middle' }}>
+                                            <Sparkles size={12} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />
+                                            AI-assisted
+                                        </span>
+                                    </label>
+                                    <textarea
+                                        name="projectDescription"
+                                        className="form-input"
+                                        rows={4}
+                                        placeholder="Describe your green project in detail... e.g., 'Installing 50kW solar panels from Tata Power Solar on our factory rooftop to generate 75,000 kWh annually and save 40 tonnes of CO2 per year'"
+                                        value={formData.projectDescription}
+                                        onChange={handleInputChange}
+                                    />
+                                    <button
+                                        className="btn btn-secondary"
+                                        onClick={handleAIExtraction}
+                                        disabled={aiExtracting || !formData.projectDescription}
+                                        style={{ marginTop: '0.75rem' }}
+                                    >
+                                        {aiExtracting ? <Loader className="spinner" size={16} /> : <Sparkles size={16} />}
+                                        {aiExtracting ? 'Extracting...' : 'Extract project details (AI-assisted)'}
+                                    </button>
+                                </div>
+
+                                {/* AI Extraction Results */}
+                                {aiExtractedData && aiConfidence && (
+                                    <div className="ai-extraction-results" style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <Sparkles size={18} style={{ color: '#6366f1' }} />
+                                                <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>AI Extracted Details</span>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Confidence:</span>
+                                                <span style={{
+                                                    fontWeight: '600',
+                                                    color: getConfidenceColor(aiConfidence.confidence),
+                                                    background: `${getConfidenceColor(aiConfidence.confidence)}20`,
+                                                    padding: '2px 8px',
+                                                    borderRadius: '8px'
+                                                }}>
+                                                    {Math.round(aiConfidence.confidence * 100)}%
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', fontSize: '0.9rem' }}>
+                                            <div>
+                                                <span style={{ color: 'var(--text-secondary)' }}>Project Type:</span>
+                                                <span style={{ marginLeft: '0.5rem', fontWeight: '500' }}>
+                                                    {aiExtractedData.project_type || '—'}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <span style={{ color: 'var(--text-secondary)' }}>Capacity:</span>
+                                                <span style={{ marginLeft: '0.5rem', fontWeight: '500' }}>
+                                                    {aiExtractedData.capacity_kw ? `${aiExtractedData.capacity_kw} kW` : '—'}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <span style={{ color: 'var(--text-secondary)' }}>Vendor:</span>
+                                                <span style={{ marginLeft: '0.5rem', fontWeight: '500' }}>
+                                                    {aiExtractedData.vendor || '—'}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <span style={{ color: 'var(--text-secondary)' }}>CO₂ Saved:</span>
+                                                <span style={{ marginLeft: '0.5rem', fontWeight: '500' }}>
+                                                    {aiExtractedData.claimed_impact?.co2_saved_tonnes_per_year
+                                                        ? `${aiExtractedData.claimed_impact.co2_saved_tonnes_per_year} tonnes/year`
+                                                        : '—'}
+                                                </span>
+                                            </div>
+                                            {aiExtractedData.claimed_impact?.energy_generated_kwh_per_year && (
+                                                <div style={{ gridColumn: 'span 2' }}>
+                                                    <span style={{ color: 'var(--text-secondary)' }}>Energy Generated:</span>
+                                                    <span style={{ marginLeft: '0.5rem', fontWeight: '500' }}>
+                                                        {aiExtractedData.claimed_impact.energy_generated_kwh_per_year.toLocaleString()} kWh/year
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {aiExtractedData.certifications?.length > 0 && (
+                                                <div style={{ gridColumn: 'span 2' }}>
+                                                    <span style={{ color: 'var(--text-secondary)' }}>Certifications:</span>
+                                                    <span style={{ marginLeft: '0.5rem', fontWeight: '500' }}>
+                                                        {aiExtractedData.certifications.join(', ')}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {aiConfidence.signals?.length > 0 && (
+                                            <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(234, 179, 8, 0.1)', borderRadius: '8px', fontSize: '0.8rem' }}>
+                                                <Info size={14} style={{ display: 'inline', marginRight: '0.5rem', color: '#eab308', verticalAlign: 'middle' }} />
+                                                <span style={{ color: 'var(--text-secondary)' }}>Some fields couldn't be extracted. You can add them manually below.</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
-                            <div className="form-row">
+                            <div className="form-row" style={{ marginTop: 'var(--spacing-4)' }}>
                                 <div className="form-group">
                                     <label className="form-label">Estimated Annual Savings (₹)</label>
                                     <input

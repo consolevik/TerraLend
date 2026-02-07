@@ -369,4 +369,28 @@ export async function getClimateRisk(location) {
     });
 }
 
+// ============================================
+// AI EXTRACTION ENDPOINTS
+// ============================================
+
+/**
+ * Extract structured sustainability data from free-text description using AI
+ * @param {string} text - Free-text sustainability description
+ * @returns {Promise<Object>} Extracted claim with confidence score
+ */
+export async function extractSustainabilityClaim(text) {
+    return apiRequest('/api/ai/extract-claim', {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+    });
+}
+
+/**
+ * Get AI service status
+ * @returns {Promise<Object>} AI service status and capabilities
+ */
+export async function getAIServiceStatus() {
+    return apiRequest('/api/ai/status');
+}
+
 export { ApiError };
