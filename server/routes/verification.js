@@ -56,16 +56,31 @@ router.post('/green-score', async (req, res) => {
         };
 
         // 4. Update Loan Status & Save
+        // 4. Update Loan Status & Save
+        let newStatus = 'approved';
+        let rejectionReason = null;
+
+        // Rejection Criteria
+        if (!greenwashingResult.passed) {
+            newStatus = 'rejected';
+            rejectionReason = 'Greenwashing detected: Sustainability claims could not be verified.';
+        } else if (scoreResult.greenScore < 50) {
+            newStatus = 'rejected';
+            rejectionReason = `Green Score too low (${scoreResult.greenScore}/100). Minimum 50 required.`;
+        }
+
         if (isDbConnected() && loan.save) {
-            loan.status = 'approved'; // Auto-approve if verified? Or just 'active'? Let's keep 'approved' for now
+            loan.status = newStatus;
             loan.aiScore = scoreResult.greenScore;
             loan.sustainabilityClass = scoreResult.sustainabilityClass;
+            if (rejectionReason) loan.rejectionReason = rejectionReason;
             await loan.save();
         } else {
             // Update local object
-            loan.status = 'approved';
+            loan.status = newStatus;
             loan.aiScore = scoreResult.greenScore;
             loan.sustainabilityClass = scoreResult.sustainabilityClass;
+            if (rejectionReason) loan.rejectionReason = rejectionReason;
             loan.updatedAt = new Date().toISOString();
         }
 

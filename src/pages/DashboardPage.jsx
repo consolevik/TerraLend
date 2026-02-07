@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
     CreditCard,
     Calendar,
@@ -26,16 +26,13 @@ import './DashboardPage.css';
  * Supports role-based views: borrower, lender, regulator
  */
 function DashboardPage() {
-    const [searchParams] = useSearchParams();
-    const role = searchParams.get('role') || 'borrower';
-
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [dashboardData, setDashboardData] = useState(null);
 
     useEffect(() => {
         fetchDashboardData();
-    }, [role]);
+    }, []);
 
     const fetchDashboardData = async () => {
         setLoading(true);
@@ -107,6 +104,13 @@ function DashboardPage() {
             // Cap at 900
             const finalCreditScore = Math.min(900, baseScore);
 
+            // Dynamic Active Loan Count (Frontend Override)
+            // Includes all loans that are not rejected, cancelled, or completed
+            // This ensures the user sees their new application counted immediately
+            const activeLoansCount = transformedLoans.filter(l =>
+                ['active', 'pending', 'pending_verification', 'approved'].includes(l.status)
+            ).length;
+
             // Generate climate alerts based on location (mock logic or from loan)
             // In a real app, this would come from the /api/climate/risk endpoint we built
             const climateAlerts = [];
@@ -124,7 +128,10 @@ function DashboardPage() {
 
             setDashboardData({
                 loans: transformedLoans,
-                summary: loansResponse.summary,
+                summary: {
+                    ...loansResponse.summary,
+                    activeLoans: activeLoansCount // Use our dynamic count
+                },
                 impact: impactResponse,
                 creditScore: finalCreditScore,
                 creditBreakdown: breakdown,
@@ -148,15 +155,6 @@ function DashboardPage() {
             rejected: { label: 'Rejected', className: 'error' },
         };
         return statuses[status] || statuses.pending;
-    };
-
-    const getRoleLabel = () => {
-        const labels = {
-            borrower: 'Borrower Dashboard',
-            lender: 'Lender View',
-            regulator: 'Regulator View',
-        };
-        return labels[role] || labels.borrower;
     };
 
     // Use real data, default to empty structure if loading or null
@@ -185,7 +183,7 @@ function DashboardPage() {
                 {/* Page Header */}
                 <div className="dashboard-header">
                     <div>
-                        <h1>{getRoleLabel()}</h1>
+                        <h1>Dashboard</h1>
                         <p>Welcome back! Here's your green finance overview.</p>
                     </div>
                     <div className="header-actions">
@@ -198,29 +196,6 @@ function DashboardPage() {
                             <ArrowRight size={18} />
                         </Link>
                     </div>
-                </div>
-
-                {/* Role Switcher (Demo) */}
-                <div className="role-switcher">
-                    <span>View as:</span>
-                    <Link
-                        to="/dashboard?role=borrower"
-                        className={`role-btn ${role === 'borrower' ? 'active' : ''}`}
-                    >
-                        Borrower
-                    </Link>
-                    <Link
-                        to="/dashboard?role=lender"
-                        className={`role-btn ${role === 'lender' ? 'active' : ''}`}
-                    >
-                        Lender
-                    </Link>
-                    <Link
-                        to="/dashboard?role=regulator"
-                        className={`role-btn ${role === 'regulator' ? 'active' : ''}`}
-                    >
-                        Regulator
-                    </Link>
                 </div>
 
                 {/* Error State */}

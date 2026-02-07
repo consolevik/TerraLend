@@ -10,6 +10,8 @@ import AuditLogPage from './pages/AuditLogPage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 
+import RequireAuth from './components/RequireAuth'
+
 function App() {
     return (
         <div className="app">
@@ -19,11 +21,46 @@ function App() {
                     <Route path="/" element={<LandingPage />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/signup" element={<SignupPage />} />
-                    <Route path="/apply" element={<LoanInitiationPage />} />
-                    <Route path="/verification/:loanId" element={<AIVerificationPage />} />
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                    <Route path="/impact" element={<ImpactPage />} />
-                    <Route path="/audit" element={<AuditLogPage />} />
+                    <Route
+                        path="/apply"
+                        element={
+                            <RequireAuth>
+                                <LoanInitiationPage />
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/verification/:loanId"
+                        element={
+                            <RequireAuth>
+                                <AIVerificationPage />
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/dashboard"
+                        element={
+                            <RequireAuth>
+                                <DashboardPage />
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/impact"
+                        element={
+                            <RequireAuth>
+                                <ImpactPage />
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/audit"
+                        element={
+                            <RequireAuth>
+                                <AuditLogPage />
+                            </RequireAuth>
+                        }
+                    />
                 </Routes>
             </main>
             <Footer />

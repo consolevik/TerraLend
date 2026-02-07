@@ -14,7 +14,6 @@ const SignupPage = () => {
         email: '',
         password: '',
         confirmPassword: '',
-        role: 'user' // Default to user/borrower
     });
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
