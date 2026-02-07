@@ -77,8 +77,29 @@ router.post('/register', async (req, res) => {
             });
         }
     } catch (error) {
-        console.error('[Auth] Registration CRITICAL error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        console.error('[Auth] Registration error:', error);
+
+        // Handle Mongoose duplicate key error
+        if (error.code === 11000) {
+            return res.status(400).json({
+                success: false,
+                error: 'Email already exists'
+            });
+        }
+
+        // Handle Mongoose validation errors
+        if (error.name === 'ValidationError') {
+            const messages = Object.values(error.errors).map(val => val.message);
+            return res.status(400).json({
+                success: false,
+                error: messages.join(', ')
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Registration failed'
+        });
     }
 });
 

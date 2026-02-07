@@ -63,8 +63,9 @@ connectDB();
 // ============================================
 
 // Enable CORS for frontend communication
+// Allow ALL origins for development to prevent any CORS issues
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -75,6 +76,7 @@ app.use(express.json());
 
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    console.log('Origin:', req.headers.origin); // Log the origin for debugging
     if (req.method === 'POST') console.log('Body:', JSON.stringify(req.body).substring(0, 100) + '...');
     next();
 });
